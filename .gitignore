@@ -1,0 +1,13 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+# Optional
+*.egg-info/
+.eggs/
+*.log
+# IDE
+.idea/
+.vscode/

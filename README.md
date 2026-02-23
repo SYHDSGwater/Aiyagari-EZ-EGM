@@ -28,9 +28,9 @@ python "aiyagari with e-z egm.py" > run_log.txt 2>&1
 
 ## What this code does
 
-- **Household problem:** Epstein-Zin preferences (risk aversion \(\gamma\), EIS \(\psi\)). EGM inverts the Euler equation on an endogenous grid using the power transformation \(W = V^{1-\rho}\), \(\rho = 1/\psi\); no root-finding in the inner loop. Policies are on a unified cash-on-hand grid `m_grid`; an internal asset grid `a_grid` is used for the EGM step.
-- **Firm:** Cobb-Douglas production; interest rate and wage as functions of aggregate capital \(K\).
-- **Equilibrium:** Bisection on \(K\) so that capital demand equals household asset supply. Stationary distribution is computed from the optimal policy and used to aggregate assets.
+- **Household problem:** Epstein-Zin preferences (risk aversion $\gamma$, EIS $\psi$). EGM inverts the Euler equation on an endogenous grid using the power transformation $W = V^{1-\rho}$, $\rho = 1/\psi$; no root-finding in the inner loop. Policies are on a unified cash-on-hand grid `m_grid`; an internal asset grid `a_grid` is used for the EGM step.
+- **Firm:** Cobb-Douglas production; interest rate and wage as functions of aggregate capital $K$.
+- **Equilibrium:** Bisection on $K$ so that capital demand equals household asset supply. Stationary distribution is computed from the optimal policy and used to aggregate assets.
 
 ---
 
@@ -44,7 +44,7 @@ The same Aiyagari–Epstein-Zin setup was run with **EGM** (this repo) and with 
 | Policy conversion | 220.8 ms | — |
 | Stationary distribution | 304.5 ms | 216.2 ms |
 | **Total per household** | **830.8 ms** | **545.8 ms** |
-| **Full equilibrium** \(K^*\) | **28.09 s** | **120.89 s** |
+| **Full equilibrium** $K^*$ | **28.09 s** | **120.89 s** |
 
 EGM converges in about 212 iterations for the reported run. For **full equilibrium**, EGM is roughly **4.3× faster** (28 s vs 121 s) because the equilibrium loop repeatedly solves the household problem; EGM’s convergence and cost per iteration make the overall search much cheaper than with Howard PI.
 
@@ -89,4 +89,4 @@ Aiyagari with EZ EGM/
 
 ## License
 
-MIT.
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.

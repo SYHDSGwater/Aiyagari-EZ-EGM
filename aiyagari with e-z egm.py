@@ -1,7 +1,10 @@
 from collections import namedtuple
+import atexit
+from datetime import datetime
+import os
+import sys
 import jax
 import jax.numpy as jnp
-from scipy.optimize import bisect
 from scipy.interpolate import interp1d
 import time
 import matplotlib.pyplot as plt
@@ -17,6 +20,62 @@ dpi = 300
 # Numerical constants
 EPS = 1e-10  # Small number to avoid division by zero
 SOLVER_TOL = 1e-5  # Solver tolerance
+G_CALL_COUNT = 0  # Counts capital-supply evaluations during equilibrium search
+
+class Tee:
+    """Write terminal output to multiple streams, e.g. console and log file."""
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data):
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+            if stream not in (sys.__stdout__, sys.__stderr__):
+                try:
+                    os.fsync(stream.fileno())
+                except OSError:
+                    pass
+
+    def flush(self):
+        for stream in self.streams:
+            stream.flush()
+            if stream not in (sys.__stdout__, sys.__stderr__):
+                try:
+                    os.fsync(stream.fileno())
+                except OSError:
+                    pass
+
+def start_run_log(log_dir="logs"):
+    """Mirror stdout/stderr to a timestamped run log."""
+    if not os.path.isabs(log_dir):
+        base_dir = os.path.dirname(os.path.abspath(__file__)) if "__file__" in globals() else os.getcwd()
+        log_dir = os.path.join(base_dir, log_dir)
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    log_file = open(log_path, "w", encoding="utf-8", buffering=1)
+    sys.stdout = Tee(sys.__stdout__, log_file)
+    sys.stderr = Tee(sys.__stderr__, log_file)
+
+    def close_log():
+        sys.stdout = sys.__stdout__
+        sys.stderr = sys.__stderr__
+        log_file.close()
+
+    atexit.register(close_log)
+    return log_path
+
+def sync_jax(value):
+    """Synchronize JAX work before timing or returning diagnostics."""
+    if hasattr(value, "block_until_ready"):
+        value.block_until_ready()
+    elif isinstance(value, (tuple, list)):
+        for item in value:
+            sync_jax(item)
+    elif isinstance(value, dict):
+        for item in value.values():
+            sync_jax(item)
+    return value
 
 # ------------------------------
 # Firms(Cobb-Douglas Production Function)
@@ -238,8 +297,41 @@ def ezegm_step(V, c_policy, household, prices, γ, ψ):
     return V_out, c_out
 
 
+@jax.jit
+def solve_household_egm_loop(V_init, c_init, household, prices, γ, ψ, tol, max_iter):
+    """Run household EGM iterations inside JAX control flow."""
+    def cond_fn(state):
+        V, c_policy, iteration, error_V, error_c = state
+        return (jnp.maximum(error_V, error_c) >= tol) & (iteration < max_iter)
 
-def solve_household_egm(household, prices, γ, ψ, tol=1e-5, max_iter=1000, verbose=False):
+    def body_fn(state):
+        V, c_policy, iteration, error_V, error_c = state
+        V_new, c_new = ezegm_step(V, c_policy, household, prices, γ, ψ)
+        error_V_new = jnp.max(jnp.abs(V_new - V))
+        error_c_new = jnp.max(jnp.abs(c_new - c_policy))
+        return V_new, c_new, iteration + 1, error_V_new, error_c_new
+
+    init_state = (
+        V_init,
+        c_init,
+        jnp.array(0, dtype=jnp.int32),
+        jnp.array(tol + 1.0),
+        jnp.array(tol + 1.0),
+    )
+    return jax.lax.while_loop(cond_fn, body_fn, init_state)
+
+
+def solve_household_egm(
+    household,
+    prices,
+    γ,
+    ψ,
+    tol=1e-5,
+    max_iter=1000,
+    verbose=False,
+    initial_state=None,
+    return_info=False,
+):
     """
     Solve household problem using EGM for Epstein-Zin preferences
     
@@ -271,39 +363,47 @@ def solve_household_egm(household, prices, γ, ψ, tol=1e-5, max_iter=1000, verb
     r, w = prices
     m_size, z_size = len(m_grid), len(z_grid)
     
-    # Initialize value function and consumption policy on m_grid
-    # Initial guess: consume a fraction of cash-on-hand
-    V = jnp.ones((m_size, z_size))
-    c_policy = jnp.outer(m_grid, jnp.ones(z_size)) * 0.1 + 0.01
-    
-    # Ensure initial consumption is positive and less than m
-    c_policy = jnp.maximum(c_policy, EPS)
-    c_policy = jnp.minimum(c_policy, m_grid[:, None] - EPS)
-    
-    # Iteration
-    for iteration in range(max_iter):
-        V_new, c_new = ezegm_step(V, c_policy, household, prices, γ, ψ)
-        
-        # Check convergence
-        error_V = jnp.max(jnp.abs(V_new - V))
-        error_c = jnp.max(jnp.abs(c_new - c_policy))
-        
-        if verbose and iteration % 10 == 0:
-            print(f"Iteration {iteration}: error_V = {error_V:.6e}, error_c = {error_c:.6e}")
-        
-        # Update
-        V = V_new
-        c_policy = c_new
-        
-        # Check convergence
-        if error_V < tol and error_c < tol:
-            if verbose:
-                print(f"Converged in {iteration} iterations")
-            break
-    
-    if iteration == max_iter - 1:
-        print(f"Warning: Did not converge in {max_iter} iterations. Final error: {error_V:.6e}")
-    
+    if initial_state is None:
+        # Initial guess: consume a fraction of cash-on-hand
+        V_init = jnp.ones((m_size, z_size))
+        c_init = jnp.outer(m_grid, jnp.ones(z_size)) * 0.1 + 0.01
+    else:
+        c_init, V_init = initial_state
+        c_init = jnp.asarray(c_init)
+        V_init = jnp.asarray(V_init)
+
+    c_init = jnp.maximum(c_init, EPS)
+    c_init = jnp.minimum(c_init, m_grid[:, None] - EPS)
+
+    V, c_policy, iteration, error_V, error_c = solve_household_egm_loop(
+        V_init, c_init, household, prices, γ, ψ, tol, max_iter
+    )
+    sync_jax((V, c_policy, iteration, error_V, error_c))
+
+    iteration_int = int(iteration)
+    error_V_float = float(error_V)
+    error_c_float = float(error_c)
+
+    if verbose:
+        if max(error_V_float, error_c_float) < tol:
+            print(
+                f"Converged in {iteration_int} iterations: "
+                f"error_V = {error_V_float:.6e}, error_c = {error_c_float:.6e}"
+            )
+        else:
+            print(
+                f"Warning: Did not converge in {max_iter} iterations. "
+                f"Final error_V = {error_V_float:.6e}, error_c = {error_c_float:.6e}"
+            )
+
+    if return_info:
+        info = {
+            "iterations": iteration_int,
+            "error_V": error_V_float,
+            "error_c": error_c_float,
+        }
+        return c_policy, V, info
+
     return c_policy, V
 
 
@@ -450,26 +550,73 @@ def capital_supply(σ, household):
 # ------------------------------
 # Equilibrium computation
 
-def G(K, firm, household, γ, ψ, verbose=False):
+def G(K, firm, household, γ, ψ, verbose=False, initial_state=None, return_state=False):
     """
     Equilibrium mapping: given K, compute household's asset supply
     """
+    global G_CALL_COUNT
+    G_CALL_COUNT += 1
+
     # get the enterprise price given K
     r = r_given_k(K, firm)
     w = r_to_w(r, firm)
     prices = create_prices(r=r, w=w)
     
+    g_start = time.time()
+
     # Solve household problem using EGM
-    c_policy, V = solve_household_egm(household, prices, γ, ψ, verbose=verbose)
+    household_start = time.time()
+    c_policy, V, info = solve_household_egm(
+        household,
+        prices,
+        γ,
+        ψ,
+        verbose=False,
+        initial_state=initial_state,
+        return_info=True,
+    )
+    household_time = time.time() - household_start
     
     # Convert to asset policy indices
+    policy_start = time.time()
     σ = get_policy_from_consumption(c_policy, household, prices)
+    sync_jax(σ)
+    policy_time = time.time() - policy_start
     
-    return capital_supply(σ, household)
+    supply_start = time.time()
+    supply = capital_supply(σ, household)
+    supply_time = time.time() - supply_start
+    g_time = time.time() - g_start
 
-def compute_equilibrium(firm, household, γ, ψ, a=1, b=20, xtol=1e-6):
+    if verbose:
+        print(
+            f"G eval {G_CALL_COUNT:02d}: K={K:.6f}, r={r:.6f}, w={w:.6f}, "
+            f"supply={supply:.6f}, household_iters={info['iterations']}, "
+            f"times=[household {household_time:.3f}s, policy {policy_time:.3f}s, "
+            f"distribution {supply_time:.3f}s, total {g_time:.3f}s]"
+        )
+
+    if return_state:
+        return supply, (c_policy, V), info
+
+    return supply
+
+def compute_equilibrium(firm, household, γ, ψ, a=1, b=20, xtol=1e-4, verbose=False):
+    global G_CALL_COUNT
+    G_CALL_COUNT = 0
+
     def objective(k):
-        return k - G(k, firm, household, γ, ψ)
+        supply = G(
+            k,
+            firm,
+            household,
+            γ,
+            ψ,
+            verbose=verbose,
+            initial_state=None,
+            return_state=False,
+        )
+        return k - supply
     
     # dynamically extend the search interval until a suitable interval is found
     left, right = a, b
@@ -488,14 +635,30 @@ def compute_equilibrium(firm, household, γ, ψ, a=1, b=20, xtol=1e-6):
     if f_left * f_right >= 0:
         raise ValueError("No solution found in the given range")
                 
-    # solve using bisection
-    K = bisect(objective, left, right, xtol=xtol)
+    # Solve using bisection. Each candidate K is solved independently because
+    # cross-price warm starts can falsely satisfy the fixed-point tolerance.
+    while right - left > xtol:
+        mid = 0.5 * (left + right)
+        f_mid = objective(mid)
+        if f_left * f_mid <= 0:
+            right = mid
+            f_right = f_mid
+        else:
+            left = mid
+            f_left = f_mid
+
+    K = 0.5 * (left + right)
+    if verbose:
+        print(f"Equilibrium search used {G_CALL_COUNT} G(K) evaluations")
     return K
 
 # ------------------------------
 # Main execution
 
 if __name__ == '__main__':
+    log_path = start_run_log()
+    print(f"Run log saved to: {os.path.abspath(log_path)}")
+
     firm = create_firm()
     household = create_household()
     a_grid = household.a_grid
@@ -517,12 +680,13 @@ if __name__ == '__main__':
     
     # Warm-up run (JIT compilation)
     print("\nWarm-up run (JIT compilation)...")
-    _ = solve_household_egm(household, test_prices, γ=2.0, ψ=4.0, max_iter=5, verbose=False)
+    sync_jax(solve_household_egm(household, test_prices, γ=2.0, ψ=4.0, max_iter=5, verbose=False))
     
     # Timed run
     print("\nTimed run...")
     start_egm = time.time()
     c_test, V_test = solve_household_egm(household, test_prices, γ=2.0, ψ=4.0, tol=1e-5, verbose=True)
+    sync_jax((c_test, V_test))
     time_egm = time.time() - start_egm
     print(f"\n>>> EGM single solve time: {time_egm*1000:.1f} ms ({time_egm:.3f} seconds)")
     
@@ -530,12 +694,14 @@ if __name__ == '__main__':
     print("\nMeasuring policy conversion...")
     start_policy = time.time()
     σ_test = get_policy_from_consumption(c_test, household, test_prices)
+    sync_jax(σ_test)
     time_policy = time.time() - start_policy
     print(f">>> Policy conversion time: {time_policy*1000:.1f} ms")
     
     print("\nMeasuring stationary distribution calculation...")
     start_dist = time.time()
     g_test, g_a_test = compute_asset_stationary(σ_test, household)
+    sync_jax((g_test, g_a_test))
     time_dist = time.time() - start_dist
     print(f">>> Distribution calculation time: {time_dist*1000:.1f} ms")
     
@@ -554,7 +720,7 @@ if __name__ == '__main__':
     print("\n\nCompute the equilibrium capital using EGM method")
     start = time.time()
     try:
-        K_star = compute_equilibrium(firm, household, γ=2.0, ψ=4.0)
+        K_star = compute_equilibrium(firm, household, γ=2.0, ψ=4.0, verbose=True)
         elapsed = time.time() - start
         print(f"Compute the equilibrium capital {K_star:.5f}, time cost {elapsed:.2f} seconds")
     except ValueError as e:

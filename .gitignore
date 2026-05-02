@@ -8,7 +8,13 @@ __pycache__/
 *.egg-info/
 .eggs/
 *.log
+logs/
 build/
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
 # IDE
 .idea/
 .vscode/

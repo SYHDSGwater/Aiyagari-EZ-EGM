@@ -676,12 +676,14 @@ if __name__ == '__main__':
     
     # compute the consumption and saving functions
     def compute_with_params(a_idx, z_idx, c_policy, household, prices):
-        β, a_grid, z_grid, Π = household
+        β, a_grid, m_grid, z_grid, Π = household
         r, w = prices
         a = a_grid[a_idx]
         z = z_grid[z_idx]
-        c = c_policy[a_idx, z_idx]
-        ap = w * z + (1 + r) * a - c
+        m = (1 + r) * a + w * z
+        c = jnp.interp(m, m_grid, c_policy[:, z_idx])
+        c = jnp.minimum(jnp.maximum(c, EPS), m - EPS)
+        ap = m - c
         s = ap - a
             
         return c, s

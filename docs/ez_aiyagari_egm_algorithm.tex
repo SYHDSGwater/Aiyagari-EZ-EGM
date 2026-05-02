@@ -1,0 +1,234 @@
+\documentclass[UTF8,a4paper,12pt]{ctexart}
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+
+\geometry{left=2.6cm,right=2.6cm,top=2.6cm,bottom=2.8cm}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+\setlist[itemize]{itemsep=0.15em,topsep=0.25em}
+\floatname{algorithm}{算法}
+\algrenewcommand\algorithmicrequire{\textbf{输入：}}
+\algrenewcommand\algorithmicensure{\textbf{输出：}}
+
+\title{EGM Method Solve E-Z Preference Aiyagari Model}
+\author{Jiang Hongwei}
+\date{}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{R}
+\newcommand{\Agrid}{\mathcal{A}}
+\newcommand{\Mgrid}{\mathcal{M}}
+\newcommand{\Zgrid}{\mathcal{Z}}
+\newcommand{\tol}{\varepsilon}
+
+\begin{document}
+\maketitle
+
+\section{模型设定}
+
+\subsection{家庭问题}
+
+经济中存在连续统的家庭，面临特质性收入冲击。收入状态为 $z\in\Zgrid=\{z_1,\ldots,z_{N_z}\}$，服从马尔可夫过程，转移矩阵为：
+\[
+    \Pi_{ik}=\Pr(z_{t+1}=z_k\mid z_t=z_i).
+\]
+家庭在每一期给定手头现金 (cash-on-hand) $m$ 和收入状态 $z_i$ 的情况下，选择消费 $c$ 和期末资产 $a'$。给定市场利率 $r$ 和工资 $w$，令 $R=1+r$，预算约束和资产累积方程为：
+\[
+    m = R a + w z, \qquad a' = m - c, \qquad m' = R a' + w z'.
+\]
+
+为了EGM Method Solving，定义两组网格：
+\begin{itemize}
+    \item $\Agrid=\{a_1,\ldots,a_{N_a}\}$：\textbf{期末资产网格}。这是内生网格法 (EGM) 计算时的给定起点，用来反推当期的消费和现金。
+    \item $\Mgrid=\{m_1,\ldots,m_{N_m}\}$：\textbf{手头现金网格}。这是存储策略函数 $c(m,z)$ 和值函数 $V(m,z)$ 的标准网格点。
+\end{itemize}
+
+\subsection{企业问题}
+
+企业使用柯布-道格拉斯生产函数，资本需求由总资本 $K$ 和总劳动 $N$ 决定。价格由边际产出给出：
+\[
+    r(K)=A\alpha\left(\frac{N}{K}\right)^{1-\alpha}-\delta,
+    \qquad
+    w(K)=A(1-\alpha)\left(\frac{K}{N}\right)^\alpha.
+\]
+
+\subsection{Epstein-Zin (E-Z) 偏好}
+
+家庭具有 Epstein-Zin 递归效用函数，能够将相对风险厌恶系数 $\gamma$ 和跨期替代弹性 (EIS) $\psi$ 分离。
+定义：
+\[
+    \rho = \frac{1}{\psi},\qquad \theta = \frac{1-\gamma}{1-\rho}
+\]
+为了计算方便，我们定义变换后的价值函数 $W(m,z) = V(m,z)^{1-\rho}$。在 $W$ 空间中，贝尔曼方程可以写为：
+\[
+    W(m,z)
+    =
+    \max_{c} \left\{ (1-\beta)c^{1-\rho} + \beta \mu(m-c, z) \right\}
+\]
+其中，$\mu(a', z)$ 是考虑到未来收入不确定性的\textbf{确定性等价项 (Certainty Equivalent)}，定义为：
+\[
+    \mu(a',z_i)
+    =
+    \left[
+        \sum_{k=1}^{N_z}
+        \Pi_{ik}
+        W(R a'+wz_k,z_k)^\theta
+    \right]^{1/\theta}.
+\]
+
+\section{Epstein-Zin 偏好下的欧拉方程推导}
+
+为了使用内生网格法 (EGM)，我们需要推导出关于消费的欧拉方程。
+对贝尔曼方程关于消费 $c$ 求一阶导数（注意 $a' = m - c$，所以 $\frac{\partial a'}{\partial c} = -1$）：
+\[
+    (1-\beta)(1-\rho) c^{-\rho} + \beta \frac{\partial \mu(a', z)}{\partial a'} (-1) = 0
+\]
+整理得到：
+\begin{equation}
+    (1-\beta)(1-\rho) c^{-\rho} = \beta \frac{\partial \mu(a', z_i)}{\partial a'} \label{eq:foc}
+\end{equation}
+
+接下来我们需要计算 $\frac{\partial \mu}{\partial a'}$。根据 $\mu(a', z_i)$ 的定义：
+\[
+    \frac{\partial \mu(a', z_i)}{\partial a'}
+    =
+    \frac{1}{\theta} \left[ \sum_{k} \Pi_{ik} {W'_{k}}^{\theta} \right]^{\frac{1}{\theta}-1} 
+    \cdot \sum_{k} \Pi_{ik} \theta {W'_{k}}^{\theta-1} \frac{\partial W(R a' + w z_k, z_k)}{\partial a'}
+\]
+这里令 $m'_k = R a' + w z_k$ 为明天的手头现金，$W'_k = W(m'_k, z_k)$ 为明天的价值。注意链式法则下 $\frac{\partial m'_k}{\partial a'} = R$。
+上式化简为：
+\begin{equation}
+    \frac{\partial \mu(a', z_i)}{\partial a'} = \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} W_m(m'_k, z_k) R \label{eq:dmu_da}
+\end{equation}
+
+再根据\textbf{包络定理 (Envelope Theorem)}，对贝尔曼方程关于当前状态 $m$ 求导（此时 $c$ 视为最优，$\frac{\partial a'}{\partial m} = 1$）：
+\[
+    W_m(m, z) = \beta \frac{\partial \mu(a', z)}{\partial a'} (1)
+\]
+结合式 \eqref{eq:foc}，我们可以将 $W_m$ 表达为当期边际效用：
+\begin{equation}
+    W_m(m, z) = (1-\beta)(1-\rho) c^{-\rho} \label{eq:envelope}
+\end{equation}
+
+将明天的包络条件 $W_m(m'_k, z_k) = (1-\beta)(1-\rho) (c'_k)^{-\rho}$ 代入到式 \eqref{eq:dmu_da} 中：
+\[
+    \frac{\partial \mu}{\partial a'} = \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} (1-\beta)(1-\rho) (c'_k)^{-\rho} R
+\]
+将上式代回一阶条件 \eqref{eq:foc}：
+\[
+    (1-\beta)(1-\rho) c^{-\rho} = \beta \left[ \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} (1-\beta)(1-\rho) (c'_k)^{-\rho} R \right]
+\]
+两边同时消去常数项 $(1-\beta)(1-\rho)$，最终得到 \textbf{Epstein-Zin 偏好下的欧拉方程}：
+\begin{equation}
+    c^{-\rho} = \beta R \mu(a', z_i)^{1-\theta} \left[ \sum_{k=1}^{N_z} \Pi_{ik} {W_k'}^{\theta-1} (c'_k)^{-\rho} \right] \label{eq:euler}
+\end{equation}
+令大括号内的期望项为 $\Xi(a',z_i) = \sum_{k} \Pi_{ik} (W'_k)^{\theta-1} (c'_k)^{-\rho}$，即为代码中每次迭代所计算的期望部分。
+
+\section{内生网格法 (EGM) 迭代步骤}
+
+传统方法给定 $m$ 求解 $a'$，需要非线性求解器。EGM 的核心思想是\textbf{逆向操作}：利用推导出的欧拉方程，先给定明天的期末资产 $a'$，直接反向解析计算出今天的消费 $c$，进而推导出手头现金 $m=a'+c$。
+
+给定上一轮的策略函数 $c^{(n)}(m,z)$ 和值函数 $V^{(n)}(m,z)$，单次 EGM 更新的具体步骤如下：
+
+\begin{enumerate}
+    \item \textbf{选定期末资产 (畅想明天)}：取固定的期末资产网格点 $a_j\in\Agrid$。此时假设我们决定本期结束时存下 $a_j$。
+    \item \textbf{计算明天现金}：对每个 $a_j$ 和明天可能的收入状态 $z_k$，计算明天的手头现金：$m'_{jk}=\R a_j+wz_k$。
+    \item \textbf{查表预测明天}：从上一轮存储的固定网格 $\Mgrid$ 上，插值得到明天的消费和值函数：$c'_{jk}=c^{(n)}(m'_{jk},z_k)$， $V'_{jk}=V^{(n)}(m'_{jk},z_k)$。
+    \item \textbf{空间转换}：转换到 $W$ 空间：$W'_{jk}=(V'_{jk})^{1-\rho}$。
+    \item \textbf{计算确定性等价}：对当前状态 $z_i$，计算明天价值的确定性等价项：
+    \[
+        \mu^{(n)}_{ji} = \left[ \sum_{k=1}^{N_z} \Pi_{ik}(W'_{jk})^\theta \right]^{1/\theta}.
+    \]
+    \item \textbf{计算期望项}：计算欧拉方程 \eqref{eq:euler} 右边的数学期望项：
+    \[
+        \Xi^{(n)}_{ji} = \sum_{k=1}^{N_z} \Pi_{ik} (W'_{jk})^{\theta-1} (c'_{jk})^{-\rho}.
+    \]
+    \item \textbf{解析求解当期消费 (时光倒流)}：利用欧拉方程，直接算出今天必须消费多少才能让存下 $a_j$ 成为最优选择：
+    \[
+        c^{\mathrm{endog}}_{ji} = \left[ \beta\R \left(\mu^{(n)}_{ji}\right)^{1-\theta} \Xi^{(n)}_{ji} \right]^{-1/\rho}.
+    \]
+    \item \textbf{推导当期手头现金 (内生网格)}：既然今天存了 $a_j$，又消费了 $c^{\mathrm{endog}}$，那么今天一开始的现金必须是：
+    \[
+        m^{\mathrm{endog}}_{ji} = a_j+c^{\mathrm{endog}}_{ji}.
+    \]
+    代码在此步通常会在网格前端附加流动性约束边界点，如 $(m, c)=(0, 0)$ 等，处理借贷约束。
+    \item \textbf{插值归位到标准网格}：算出的点集 $\{(m^{\mathrm{endog}}_{ji},c^{\mathrm{endog}}_{ji})\}_{j=1}^{N_a}$ 中，现金部分是不规则的小数（内生的）。为了下一轮能够继续查表，对每个 $z_i$，将这些点重新插值回固定的标准网格 $\Mgrid$，得到更新后的策略函数 $c^{(n+1)}(m_h,z_i)$。同理，将 $\mu^{(n)}_{ji}$ 也以 $m^{\mathrm{endog}}$ 为自变量插值到 $\Mgrid$ 上。
+    \item \textbf{更新价值函数}：利用贝尔曼方程更新当前价值函数：
+    \[
+        W^{(n+1)}(m_h,z_i) = (1-\beta)c^{(n+1)}(m_h,z_i)^{1-\rho} + \beta\mu^{(n)}(m_h,z_i),
+    \]
+    \[
+        V^{(n+1)}(m_h,z_i) = \left[W^{(n+1)}(m_h,z_i)\right]^{1/(1-\rho)}.
+    \]
+\end{enumerate}
+
+\section{分布与一般均衡}
+
+家庭问题收敛后，得到稳态策略 $c^\ast(m,z)$。对每个联合状态 $(a_j,z_i)$，计算当期的手头现金及最优储蓄：
+\[
+    m_{ji}=\R a_j+wz_i,\qquad a'_{ji}=m_{ji}-c^\ast(m_{ji},z_i).
+\]
+代码将连续的最优储蓄 $a'_{ji}$ 映射到最近的资产网格点下标：$\sigma_{ji} = \arg\min_\ell |a_\ell-a'_{ji}|$。
+
+由资产转移策略 $\sigma$ 和收入转移矩阵 $\Pi$ 构造联合状态 $(a_j, z_i)$ 的转移矩阵 $P_\sigma$：
+\[
+    P_\sigma\big((a_j,z_i),(a_\ell,z_k)\big)
+    =
+    \begin{cases}
+        \Pi_{ik}, & \ell=\sigma_{ji},\\
+        0, & \ell\neq\sigma_{ji}.
+    \end{cases}
+\]
+稳态分布 $g$ （视为行向量）满足 $g=gP_\sigma$ 且 $\sum_{j,i}g_{ji}=1$。
+
+通过对 $z$ 积分，得到资产边际分布 $g_a(a_j)=\sum_i g_{ji}$，进而求出总资本供给：
+\[
+    K^s(r,w)=\sum_j g_a(a_j)a_j.
+\]
+定义外层均衡映射 $G(K)=K^s(r(K),w(K))$。一般均衡要求资本市场出清，即求解 $K$ 使得 $F(K)\equiv K-G(K)=0$。
+
+\section{算法伪代码}
+
+\begin{algorithm}[h!]
+\caption{EGM for Epstein-Zin Aiyagari Equilibrium}
+\label{alg:ez-aiyagari-egm}
+\begin{algorithmic}[1]
+\Require 参数 $\beta,\gamma,\psi,A,N,\alpha,\delta$；网格 $\Agrid,\Mgrid,\Zgrid$；转移矩阵 $\Pi$；资本搜索区间 $[K_L,K_H]$；容差 $\tol$
+\Ensure 均衡 $K^\ast,r^\ast,w^\ast$，家庭策略 $c^\ast,V^\ast$，稳态分布 $g^\ast$
+\State 设 $\rho=1/\psi$，$\theta=(1-\gamma)/(1-\rho)$
+\While{$K_H-K_L>\tol$}
+    \State 取候选资本 $K=(K_L+K_H)/2$
+    \State 计算 $r=r(K)$，$w=w(K)$，$\R=1+r$
+    \State 初始化 $c^{(0)}$ 和 $V^{(0)}$ 于 $\Mgrid\times\Zgrid$
+    \Repeat
+        \State 对所有 $a_j,z_k$ 计算 $m'_{jk}=\R a_j+wz_k$
+        \State 插值得到 $c^{(n)}(m'_{jk},z_k)$ 和 $V^{(n)}(m'_{jk},z_k)$
+        \State 计算 $W^{(n)}_{jk}=[V^{(n)}(m'_{jk},z_k)]^{1-\rho}$
+        \State 对所有 $a_j,z_i$ 计算 $\mu^{(n)}_{ji}$ 和 $\Xi^{(n)}_{ji}$
+        \State 反解 $c^{\mathrm{endog}}_{ji}=[\beta\R(\mu^{(n)}_{ji})^{1-\theta}\Xi^{(n)}_{ji}]^{-1/\rho}$
+        \State 构造 $m^{\mathrm{endog}}_{ji}=a_j+c^{\mathrm{endog}}_{ji}$，并附加流动性约束边界点 $(0,0)$
+        \State 将点集 $(m^{\mathrm{endog}}, c^{\mathrm{endog}})$ 和 $(m^{\mathrm{endog}}, \mu^{(n)})$ 插值回固定网格 $\Mgrid$，得到 $c^{(n+1)}$ 和 $\mu^{(n)}(m,z)$
+        \State 更新 $W^{(n+1)}(m,z)=(1-\beta)(c^{(n+1)}(m,z))^{1-\rho}+\beta\mu^{(n)}(m,z)$
+        \State 更新 $V^{(n+1)}(m,z)=(W^{(n+1)}(m,z))^{1/(1-\rho)}$
+        \State 计算误差 $\Delta=\max\{\|c^{(n+1)}-c^{(n)}\|_\infty,\|V^{(n+1)}-V^{(n)}\|_\infty\}$
+    \Until{$\Delta<\tol$}
+    \State 令 $c^\ast=c^{(n+1)}$，$V^\ast=V^{(n+1)}$
+    \State 对所有 $(a_j,z_i)$ 计算 $m_{ji}=\R a_j+wz_i$，插值得到最优策略 $c^\ast(m_{ji},z_i)$
+    \State 计算资产储蓄 $a'_{ji}=m_{ji}-c^\ast(m_{ji},z_i)$，将其映射到最近的资产网格点下标 $\sigma_{ji}$
+    \State 由策略 $\sigma$ 和状态转移 $\Pi$ 构造联合转移矩阵 $P_\sigma$，求解稳态分布 $g=gP_\sigma$
+    \State 计算资本供给 $G(K)=\sum_j(\sum_i g_{ji})a_j$，更新净需求 $F(K)=K-G(K)$
+    \If{$F(K)>0$}
+        \State $K_H\gets K$  \Comment{资本短缺，提高资本存量猜测值}
+    \Else
+        \State $K_L\gets K$  \Comment{资本过剩，降低资本存量猜测值}
+    \EndIf
+\EndWhile
+\State 返回最后一次迭代的 $K^\ast,r^\ast,w^\ast,c^\ast,V^\ast,g^\ast$
+\end{algorithmic}
+\end{algorithm}
+
+\end{document}

@@ -32,7 +32,7 @@
 
 \subsection{家庭问题}
 
-经济中存在连续统的家庭，面临特质性收入冲击。收入状态为 $z\in\Zgrid=\{z_1,\ldots,z_{N_z}\}$，服从马尔可夫过程，转移矩阵为：
+家庭面临特质性收入冲击。收入状态为 $z\in\Zgrid=\{z_1,\ldots,z_{N_z}\}$，服从马尔可夫过程，转移矩阵为：
 \[
     \Pi_{ik}=\Pr(z_{t+1}=z_k\mid z_t=z_i).
 \]
@@ -41,7 +41,7 @@
     m = R a + w z, \qquad a' = m - c, \qquad m' = R a' + w z'.
 \]
 
-为了EGM Method Solving，定义两组网格：
+为了 EGM Method Solving，定义两组网格：
 \begin{itemize}
     \item $\Agrid=\{a_1,\ldots,a_{N_a}\}$：\textbf{期末资产网格}。这是内生网格法 (EGM) 计算时的给定起点，用来反推当期的消费和现金。
     \item $\Mgrid=\{m_1,\ldots,m_{N_m}\}$：\textbf{手头现金网格}。这是存储策略函数 $c(m,z)$ 和值函数 $V(m,z)$ 的标准网格点。
@@ -49,7 +49,7 @@
 
 \subsection{企业问题}
 
-企业使用柯布-道格拉斯生产函数，资本需求由总资本 $K$ 和总劳动 $N$ 决定。价格由边际产出给出：
+根据柯布-道格拉斯生产函数，资本需求由总资本 $K$ 和总劳动 $N$ 决定。价格由边际产出给出：
 \[
     r(K)=A\alpha\left(\frac{N}{K}\right)^{1-\alpha}-\delta,
     \qquad
@@ -58,7 +58,7 @@
 
 \subsection{Epstein-Zin (E-Z) 偏好}
 
-家庭具有 Epstein-Zin 递归效用函数，能够将相对风险厌恶系数 $\gamma$ 和跨期替代弹性 (EIS) $\psi$ 分离。
+家庭具有 Epstein-Zin 递归效用函数，相对风险厌恶系数 $\gamma$ 和跨期替代弹性 (EIS) $\psi$ 分离。
 定义：
 \[
     \rho = \frac{1}{\psi},\qquad \theta = \frac{1-\gamma}{1-\rho}
@@ -130,34 +130,35 @@
 
 \section{内生网格法 (EGM) 迭代步骤}
 
-传统方法给定 $m$ 求解 $a'$，需要非线性求解器。EGM 的核心思想是\textbf{逆向操作}：利用推导出的欧拉方程，先给定明天的期末资产 $a'$，直接反向解析计算出今天的消费 $c$，进而推导出手头现金 $m=a'+c$。
+在求解包含借贷约束的家庭动态规划问题时，传统的时间迭代 (Time Iteration) 或 Howard 策略迭代法 (Howard Policy Improvement, HPI) 通常需要给定当前状态 $m$ ，并利用非线性求解器（或结合一阶条件求根）寻找最优的期末资产 $a'$，计算开销较大。
+内生网格法 (Endogenous Grid Method, EGM) 则采用\textbf{逆向求解}思路：利用推导出的欧拉方程，预先给定下一期的期末资产 $a'$，通过解析式直接反解出当期的最优消费 $c$，进而推导出当期所需的手头现金 $m=a'+c$，从而完全避免了耗时的非线性求根运算。
 
 给定上一轮的策略函数 $c^{(n)}(m,z)$ 和值函数 $V^{(n)}(m,z)$，单次 EGM 更新的具体步骤如下：
 
 \begin{enumerate}
-    \item \textbf{选定期末资产 (畅想明天)}：取固定的期末资产网格点 $a_j\in\Agrid$。此时假设我们决定本期结束时存下 $a_j$。
-    \item \textbf{计算明天现金}：对每个 $a_j$ 和明天可能的收入状态 $z_k$，计算明天的手头现金：$m'_{jk}=\R a_j+wz_k$。
-    \item \textbf{查表预测明天}：从上一轮存储的固定网格 $\Mgrid$ 上，插值得到明天的消费和值函数：$c'_{jk}=c^{(n)}(m'_{jk},z_k)$， $V'_{jk}=V^{(n)}(m'_{jk},z_k)$。
-    \item \textbf{空间转换}：转换到 $W$ 空间：$W'_{jk}=(V'_{jk})^{1-\rho}$。
-    \item \textbf{计算确定性等价}：对当前状态 $z_i$，计算明天价值的确定性等价项：
+    \item \textbf{设定目标期末资产}：选取固定的期末资产网格点 $a_j\in\Agrid$ 作为本期储蓄决策的预设目标。
+    \item \textbf{确定未来现金状态}：给定 $a_j$ 及下一期可能的收入状态 $z_k$，计算下一期的手头现金：$m'_{jk}=\R a_j+wz_k$。
+    \item \textbf{评估未来策略与价值}：在上一轮存储的标准固定网格 $\Mgrid$ 上进行线性插值，评估下一期的消费和值函数：$c'_{jk}=c^{(n)}(m'_{jk},z_k)$， $V'_{jk}=V^{(n)}(m'_{jk},z_k)$。
+    \item \textbf{效用空间转换}：为计算便利，将值函数转换为 $W$ 空间表示：$W'_{jk}=(V'_{jk})^{1-\rho}$。
+    \item \textbf{计算确定性等价}：针对给定的当前状态 $z_i$，计算未来价值的确定性等价项 (Certainty Equivalent)：
     \[
         \mu^{(n)}_{ji} = \left[ \sum_{k=1}^{N_z} \Pi_{ik}(W'_{jk})^\theta \right]^{1/\theta}.
     \]
-    \item \textbf{计算期望项}：计算欧拉方程 \eqref{eq:euler} 右边的数学期望项：
+    \item \textbf{评估期望边际效用}：计算欧拉方程 \eqref{eq:euler} 右侧的期望项积分：
     \[
         \Xi^{(n)}_{ji} = \sum_{k=1}^{N_z} \Pi_{ik} (W'_{jk})^{\theta-1} (c'_{jk})^{-\rho}.
     \]
-    \item \textbf{解析求解当期消费 (时光倒流)}：利用欧拉方程，直接算出今天必须消费多少才能让存下 $a_j$ 成为最优选择：
+    \item \textbf{解析求解当期消费}：依据欧拉方程，直接解析求解出维持 $a_j$ 为最优选择所需的当期消费水平：
     \[
         c^{\mathrm{endog}}_{ji} = \left[ \beta\R \left(\mu^{(n)}_{ji}\right)^{1-\theta} \Xi^{(n)}_{ji} \right]^{-1/\rho}.
     \]
-    \item \textbf{推导当期手头现金 (内生网格)}：既然今天存了 $a_j$，又消费了 $c^{\mathrm{endog}}$，那么今天一开始的现金必须是：
+    \item \textbf{构建内生网格}：利用预算约束推导对应的当期手头现金状态：
     \[
         m^{\mathrm{endog}}_{ji} = a_j+c^{\mathrm{endog}}_{ji}.
     \]
-    代码在此步通常会在网格前端附加流动性约束边界点，如 $(m, c)=(0, 0)$ 等，处理借贷约束。
-    \item \textbf{插值归位到标准网格}：算出的点集 $\{(m^{\mathrm{endog}}_{ji},c^{\mathrm{endog}}_{ji})\}_{j=1}^{N_a}$ 中，现金部分是不规则的小数（内生的）。为了下一轮能够继续查表，对每个 $z_i$，将这些点重新插值回固定的标准网格 $\Mgrid$，得到更新后的策略函数 $c^{(n+1)}(m_h,z_i)$。同理，将 $\mu^{(n)}_{ji}$ 也以 $m^{\mathrm{endog}}$ 为自变量插值到 $\Mgrid$ 上。
-    \item \textbf{更新价值函数}：利用贝尔曼方程更新当前价值函数：
+    代码实现中，为处理 $a' \ge 0$ 的流动性约束，会在每个状态 $z_i$ 的内生网格数组前端插入约束边界点 $(m=0, c=0)$，并将该点对应的确定性等价项设为首项 $\mu^{(n)}_{0i}$（即对应 $a'=0$ 的确定性等价）。
+    \item \textbf{网格重采样 (插值归位)}：此时得到的点集 $\{(m^{\mathrm{endog}}_{ji},c^{\mathrm{endog}}_{ji})\}_{j=1}^{N_a}$ 构成了非均匀的内生网格。为便于后续迭代，对每个状态 $z_i$，以 $m^{\mathrm{endog}}$ 为自变量，将消费 $c^{\mathrm{endog}}$ 与确定性等价项 $\mu^{(n)}_{ji}$ 线性插值映射回均匀的标准网格 $\Mgrid$ 上，得到更新后的策略函数 $c^{(n+1)}(m_h,z_i)$ 及评估函数 $\mu^{(n)}(m_h,z_i)$。
+    \item \textbf{更新价值函数}：基于贝尔曼方程更新当前期的价值函数：
     \[
         W^{(n+1)}(m_h,z_i) = (1-\beta)c^{(n+1)}(m_h,z_i)^{1-\rho} + \beta\mu^{(n)}(m_h,z_i),
     \]

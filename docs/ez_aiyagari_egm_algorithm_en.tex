@@ -1,0 +1,232 @@
+\documentclass[a4paper,12pt]{article}
+
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{hyperref}
+
+\geometry{left=2.6cm,right=2.6cm,top=2.6cm,bottom=2.8cm}
+\hypersetup{colorlinks=true,linkcolor=black,urlcolor=blue,citecolor=black}
+\setlist[itemize]{itemsep=0.15em,topsep=0.25em}
+
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+
+\title{Endogenous Grid Method for Solving the Aiyagari Model with Epstein-Zin Preferences}
+\author{Jiang Hongwei}
+\date{}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\R}{R}
+\newcommand{\Agrid}{\mathcal{A}}
+\newcommand{\Mgrid}{\mathcal{M}}
+\newcommand{\Zgrid}{\mathcal{Z}}
+\newcommand{\tol}{\varepsilon}
+
+\begin{document}
+\maketitle
+
+\section{Model Setup}
+
+\subsection{Household Problem}
+
+The economy is populated by a continuum of households facing idiosyncratic income shocks. The income state is denoted by $z\in\Zgrid=\{z_1,\ldots,z_{N_z}\}$, which follows a Markov process with the transition matrix:
+\[
+    \Pi_{ik}=\Pr(z_{t+1}=z_k\mid z_t=z_i).
+\]
+In each period, given cash-on-hand $m$ and income state $z_i$, the household chooses consumption $c$ and end-of-period assets $a'$. Given the market interest rate $r$ and wage $w$, let $R=1+r$. The budget constraint and asset accumulation equations are:
+\[
+    m = R a + w z, \qquad a' = m - c, \qquad m' = R a' + w z'.
+\]
+
+For the Endogenous Grid Method (EGM), we define two distinct grids:
+\begin{itemize}
+    \item $\Agrid=\{a_1,\ldots,a_{N_a}\}$: \textbf{End-of-period asset grid}. This serves as the exogenously given starting point in the EGM algorithm to reverse-engineer current consumption and cash-on-hand.
+    \item $\Mgrid=\{m_1,\ldots,m_{N_m}\}$: \textbf{Cash-on-hand grid}. This is the standard, fixed grid used to store the policy function $c(m,z)$ and the value function $V(m,z)$.
+\end{itemize}
+
+\subsection{Firm Problem}
+
+The representative firm operates a Cobb-Douglas production technology. The demand for capital is determined by aggregate capital $K$ and aggregate labor $N$. Factor prices are given by their marginal products:
+\[
+    r(K)=A\alpha\left(\frac{N}{K}\right)^{1-\alpha}-\delta,
+    \qquad
+    w(K)=A(1-\alpha)\left(\frac{K}{N}\right)^\alpha.
+\]
+
+\subsection{Epstein-Zin (E-Z) Preferences}
+
+Households are endowed with Epstein-Zin recursive utility, which separates the coefficient of relative risk aversion $\gamma$ from the elasticity of intertemporal substitution (EIS) $\psi$. We define:
+\[
+    \rho = \frac{1}{\psi},\qquad \theta = \frac{1-\gamma}{1-\rho}
+\]
+For computational convenience, we define a transformed value function $W(m,z) = V(m,z)^{1-\rho}$. In the $W$-space, the Bellman equation can be written as:
+\[
+    W(m,z)
+    =
+    \max_{c} \left\{ (1-\beta)c^{1-\rho} + \beta \mu(m-c, z) \right\}
+\]
+where $\mu(a', z)$ is the \textbf{Certainty Equivalent} that accounts for future income uncertainty, defined as:
+\[
+    \mu(a',z_i)
+    =
+    \left[
+        \sum_{k=1}^{N_z}
+        \Pi_{ik}
+        W(R a'+wz_k,z_k)^\theta
+    \right]^{1/\theta}.
+\]
+
+\section{Derivation of the Euler Equation under Epstein-Zin Preferences}
+
+To apply the Endogenous Grid Method, we must derive the Euler equation with respect to consumption. Taking the first-order condition (FOC) of the Bellman equation with respect to $c$ (noting that $a' = m - c$, implying $\frac{\partial a'}{\partial c} = -1$):
+\[
+    (1-\beta)(1-\rho) c^{-\rho} + \beta \frac{\partial \mu(a', z)}{\partial a'} (-1) = 0
+\]
+Rearranging yields:
+\begin{equation}
+    (1-\beta)(1-\rho) c^{-\rho} = \beta \frac{\partial \mu(a', z_i)}{\partial a'} \label{eq:foc}
+\end{equation}
+
+Next, we compute $\frac{\partial \mu}{\partial a'}$. By the definition of $\mu(a', z_i)$:
+\[
+    \frac{\partial \mu(a', z_i)}{\partial a'}
+    =
+    \frac{1}{\theta} \left[ \sum_{k} \Pi_{ik} {W'_{k}}^{\theta} \right]^{\frac{1}{\theta}-1} 
+    \cdot \sum_{k} \Pi_{ik} \theta {W'_{k}}^{\theta-1} \frac{\partial W(R a' + w z_k, z_k)}{\partial a'}
+\]
+Let $m'_k = R a' + w z_k$ denote next-period cash-on-hand, and $W'_k = W(m'_k, z_k)$ denote the next-period value. Applying the chain rule, $\frac{\partial m'_k}{\partial a'} = R$. The expression simplifies to:
+\begin{equation}
+    \frac{\partial \mu(a', z_i)}{\partial a'} = \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} W_m(m'_k, z_k) R \label{eq:dmu_da}
+\end{equation}
+
+Applying the \textbf{Envelope Theorem} to the Bellman equation with respect to the current state $m$ (treating $c$ as optimal, such that $\frac{\partial a'}{\partial m} = 1$):
+\[
+    W_m(m, z) = \beta \frac{\partial \mu(a', z)}{\partial a'} (1)
+\]
+Combining this with equation \eqref{eq:foc}, the marginal value of cash-on-hand $W_m$ can be expressed in terms of current marginal utility:
+\begin{equation}
+    W_m(m, z) = (1-\beta)(1-\rho) c^{-\rho} \label{eq:envelope}
+\end{equation}
+
+Substituting the future envelope condition $W_m(m'_k, z_k) = (1-\beta)(1-\rho) (c'_k)^{-\rho}$ into equation \eqref{eq:dmu_da}:
+\[
+    \frac{\partial \mu}{\partial a'} = \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} (1-\beta)(1-\rho) (c'_k)^{-\rho} R
+\]
+Plugging this result back into the FOC \eqref{eq:foc}:
+\[
+    (1-\beta)(1-\rho) c^{-\rho} = \beta \left[ \mu(a', z_i)^{1-\theta} \sum_{k} \Pi_{ik} {W_k'}^{\theta-1} (1-\beta)(1-\rho) (c'_k)^{-\rho} R \right]
+\]
+Canceling the constant term $(1-\beta)(1-\rho)$ from both sides yields the \textbf{Epstein-Zin Euler equation}:
+\begin{equation}
+    c^{-\rho} = \beta R \mu(a', z_i)^{1-\theta} \left[ \sum_{k=1}^{N_z} \Pi_{ik} {W_k'}^{\theta-1} (c'_k)^{-\rho} \right] \label{eq:euler}
+\end{equation}
+We define the expectation term in the brackets as $\Xi(a',z_i) = \sum_{k} \Pi_{ik} (W'_k)^{\theta-1} (c'_k)^{-\rho}$, which corresponds to the expectation computed at each EGM iteration in the algorithm.
+
+\section{Iteration Steps of the Endogenous Grid Method (EGM)}
+
+When solving household dynamic programming problems subject to borrowing constraints, traditional approaches such as Time Iteration or Howard Policy Improvement (HPI) typically predetermine the current state $m$ and employ nonlinear solvers (or root-finding on first-order conditions) to find the optimal end-of-period asset $a'$, which is computationally demanding. 
+Conversely, the Endogenous Grid Method (EGM) adopts a \textbf{backward induction} strategy: leveraging the derived Euler equation, it exogenously fixes the next-period asset $a'$ and analytically solves for the optimal current consumption $c$. Subsequently, the required current cash-on-hand $m = a' + c$ is deduced, completely avoiding expensive nonlinear root-finding operations.
+
+Given the policy function $c^{(n)}(m,z)$ and value function $V^{(n)}(m,z)$ from the previous iteration, a single EGM update proceeds through the following specific steps:
+
+\begin{enumerate}
+    \item \textbf{Set Target End-of-Period Asset}: Select a fixed point from the asset grid $a_j\in\Agrid$ as the predetermined savings decision for the current period.
+    \item \textbf{Determine Future Cash-on-Hand}: Given $a_j$ and possible future income states $z_k$, compute the next-period cash-on-hand: $m'_{jk}=\R a_j+wz_k$.
+    \item \textbf{Evaluate Future Policy and Value}: Perform linear interpolation over the fixed standard grid $\Mgrid$ (stored from the previous iteration) to evaluate next-period consumption and value functions: $c'_{jk}=c^{(n)}(m'_{jk},z_k)$ and $V'_{jk}=V^{(n)}(m'_{jk},z_k)$.
+    \item \textbf{Utility Space Transformation}: For computational convenience, transform the value function into the $W$-space: $W'_{jk}=(V'_{jk})^{1-\rho}$.
+    \item \textbf{Compute Certainty Equivalent}: For a given current state $z_i$, compute the Certainty Equivalent of the future value:
+    \[
+        \mu^{(n)}_{ji} = \left[ \sum_{k=1}^{N_z} \Pi_{ik}(W'_{jk})^\theta \right]^{1/\theta}.
+    \]
+    \item \textbf{Evaluate Expected Marginal Utility}: Compute the expectation integral on the right-hand side of the Euler equation \eqref{eq:euler}:
+    \[
+        \Xi^{(n)}_{ji} = \sum_{k=1}^{N_z} \Pi_{ik} (W'_{jk})^{\theta-1} (c'_{jk})^{-\rho}.
+    \]
+    \item \textbf{Analytically Solve for Current Consumption}: Using the Euler equation, obtain the closed-form solution for the current consumption level required to make $a_j$ the optimal choice:
+    \[
+        c^{\mathrm{endog}}_{ji} = \left[ \beta\R \left(\mu^{(n)}_{ji}\right)^{1-\theta} \Xi^{(n)}_{ji} \right]^{-1/\rho}.
+    \]
+    \item \textbf{Construct the Endogenous Grid}: Deduce the corresponding current cash-on-hand state using the budget constraint:
+    \[
+        m^{\mathrm{endog}}_{ji} = a_j+c^{\mathrm{endog}}_{ji}.
+    \]
+    In the actual code implementation, to handle the liquidity constraint $a' \ge 0$, a boundary point $(m=0, c=0)$ is prepended to the endogenous grid arrays for each state $z_i$. The corresponding certainty equivalent for this point is set to the first element $\mu^{(n)}_{0i}$ (representing the certainty equivalent when $a'=0$).
+    \item \textbf{Grid Resampling (Interpolation to Standard Grid)}: The resulting set of points $\{(m^{\mathrm{endog}}_{ji},c^{\mathrm{endog}}_{ji})\}_{j=1}^{N_a}$ forms a non-uniform endogenous grid. To facilitate subsequent iterations, for each state $z_i$, the consumption $c^{\mathrm{endog}}$ and certainty equivalent $\mu^{(n)}_{ji}$ are mapped back to the uniform standard grid $\Mgrid$ via linear interpolation (using $m^{\mathrm{endog}}$ as the independent variable). This yields the updated policy function $c^{(n+1)}(m_h,z_i)$ and evaluation function $\mu^{(n)}(m_h,z_i)$.
+    \item \textbf{Update Value Function}: Update the current-period value function based on the Bellman equation:
+    \[
+        W^{(n+1)}(m_h,z_i) = (1-\beta)c^{(n+1)}(m_h,z_i)^{1-\rho} + \beta\mu^{(n)}(m_h,z_i),
+    \]
+    \[
+        V^{(n+1)}(m_h,z_i) = \left[W^{(n+1)}(m_h,z_i)\right]^{1/(1-\rho)}.
+    \]
+\end{enumerate}
+
+\section{Distribution and General Equilibrium}
+
+Upon convergence of the household problem, the steady-state policy function $c^\ast(m,z)$ is obtained. For each joint state $(a_j,z_i)$, we calculate the current cash-on-hand and optimal savings:
+\[
+    m_{ji}=\R a_j+wz_i,\qquad a'_{ji}=m_{ji}-c^\ast(m_{ji},z_i).
+\]
+The continuous optimal savings $a'_{ji}$ are mapped to the nearest index on the asset grid: $\sigma_{ji} = \arg\min_\ell |a_\ell-a'_{ji}|$.
+
+Using the asset transition policy $\sigma$ and the income transition matrix $\Pi$, we construct the transition matrix $P_\sigma$ for the joint state $(a_j, z_i)$:
+\[
+    P_\sigma\big((a_j,z_i),(a_\ell,z_k)\big)
+    =
+    \begin{cases}
+        \Pi_{ik}, & \ell=\sigma_{ji},\\
+        0, & \ell\neq\sigma_{ji}.
+    \end{cases}
+\]
+The steady-state distribution $g$ (treated as a row vector) satisfies $g=gP_\sigma$ subject to $\sum_{j,i}g_{ji}=1$.
+
+By integrating over $z$, we obtain the marginal distribution of assets $g_a(a_j)=\sum_i g_{ji}$, which allows us to compute the aggregate capital supply:
+\[
+    K^s(r,w)=\sum_j g_a(a_j)a_j.
+\]
+We define the outer equilibrium mapping $G(K)=K^s(r(K),w(K))$. General equilibrium requires the capital market to clear, which involves finding a $K$ such that $F(K)\equiv K-G(K)=0$.
+
+\section{Algorithm Pseudocode}
+
+\begin{algorithm}[h!]
+\caption{EGM for Epstein-Zin Aiyagari Equilibrium}
+\label{alg:ez-aiyagari-egm}
+\begin{algorithmic}[1]
+\Require Parameters $\beta,\gamma,\psi,A,N,\alpha,\delta$; Grids $\Agrid,\Mgrid,\Zgrid$; Transition matrix $\Pi$; Capital search bounds $[K_L,K_H]$; Tolerance $\tol$
+\Ensure Equilibrium $K^\ast,r^\ast,w^\ast$, Household policies $c^\ast,V^\ast$, Steady-state distribution $g^\ast$
+\State Set $\rho=1/\psi$ and $\theta=(1-\gamma)/(1-\rho)$
+\While{$K_H-K_L>\tol$}
+    \State Propose candidate capital $K=(K_L+K_H)/2$
+    \State Compute $r=r(K)$, $w=w(K)$, and $\R=1+r$
+    \State Initialize $c^{(0)}$ and $V^{(0)}$ on $\Mgrid\times\Zgrid$
+    \Repeat
+        \State For all $a_j,z_k$, compute $m'_{jk}=\R a_j+wz_k$
+        \State Interpolate to obtain $c^{(n)}(m'_{jk},z_k)$ and $V^{(n)}(m'_{jk},z_k)$
+        \State Compute $W^{(n)}_{jk}=[V^{(n)}(m'_{jk},z_k)]^{1-\rho}$
+        \State For all $a_j,z_i$, compute $\mu^{(n)}_{ji}$ and $\Xi^{(n)}_{ji}$
+        \State Analytically solve $c^{\mathrm{endog}}_{ji}=[\beta\R(\mu^{(n)}_{ji})^{1-\theta}\Xi^{(n)}_{ji}]^{-1/\rho}$
+        \State Construct $m^{\mathrm{endog}}_{ji}=a_j+c^{\mathrm{endog}}_{ji}$, and prepend liquidity constraint boundary point $(0,0)$
+        \State Interpolate points $(m^{\mathrm{endog}}, c^{\mathrm{endog}})$ and $(m^{\mathrm{endog}}, \mu^{(n)})$ back to the fixed grid $\Mgrid$ to obtain $c^{(n+1)}$ and $\mu^{(n)}(m,z)$
+        \State Update $W^{(n+1)}(m,z)=(1-\beta)(c^{(n+1)}(m,z))^{1-\rho}+\beta\mu^{(n)}(m,z)$
+        \State Update $V^{(n+1)}(m,z)=(W^{(n+1)}(m,z))^{1/(1-\rho)}$
+        \State Compute error $\Delta=\max\{\|c^{(n+1)}-c^{(n)}\|_\infty,\|V^{(n+1)}-V^{(n)}\|_\infty\}$
+    \Until{$\Delta<\tol$}
+    \State Set $c^\ast=c^{(n+1)}$ and $V^\ast=V^{(n+1)}$
+    \State For all $(a_j,z_i)$, compute $m_{ji}=\R a_j+wz_i$ and interpolate to get optimal policy $c^\ast(m_{ji},z_i)$
+    \State Compute asset savings $a'_{ji}=m_{ji}-c^\ast(m_{ji},z_i)$ and map to nearest asset grid index $\sigma_{ji}$
+    \State Construct joint transition matrix $P_\sigma$ from policy $\sigma$ and state transition $\Pi$, solve for steady state $g=gP_\sigma$
+    \State Compute aggregate capital supply $G(K)=\sum_j(\sum_i g_{ji})a_j$, update net demand $F(K)=K-G(K)$
+    \If{$F(K)>0$}
+        \State $K_H\gets K$ \Comment{Capital shortage, increase capital stock guess}
+    \Else
+        \State $K_L\gets K$ \Comment{Capital surplus, decrease capital stock guess}
+    \EndIf
+\EndWhile
+\State \Return $K^\ast,r^\ast,w^\ast,c^\ast,V^\ast,g^\ast$ from the final iteration
+\end{algorithmic}
+\end{algorithm}
+
+\end{document}
